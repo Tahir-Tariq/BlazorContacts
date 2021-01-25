@@ -1,11 +1,10 @@
 ﻿using BlazorContacts.Server.Paging;
 using Entities.Models;
 using Entities.RequestParameters;
-using System.Threading.Tasks;
 
-namespace BlazorContacts.Server.Repository
+namespace BlazorContacts.Server.Services
 {
-    public interface IContactRepository
+    public interface IContactService
     {
         PagedList<Contact> GetContacts(ContactParameters ContactParameters);
     }

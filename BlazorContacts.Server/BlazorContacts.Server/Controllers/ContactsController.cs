@@ -1,5 +1,4 @@
-﻿using System.Threading.Tasks;
-using BlazorContacts.Server.Repository;
+﻿using BlazorContacts.Server.Services;
 using Entities.RequestParameters;
 using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json;
@@ -10,17 +9,17 @@ namespace BlazorContacts.Server.Controllers
     [ApiController]
     public class ContactsController : ControllerBase
     {
-        private readonly IContactRepository _repo;
+        private readonly IContactService _contactService;
 
-        public ContactsController(IContactRepository repo)
+        public ContactsController(IContactService contactService)
         {
-            _repo = repo;
+            _contactService = contactService;
         }
 
 		[HttpGet]
         public IActionResult Get([FromQuery] ContactParameters ContactParameters)
         {
-            var Contacts = _repo.GetContacts(ContactParameters);
+            var Contacts = _contactService.GetContacts(ContactParameters);
 
             Response.Headers.Add("X-Pagination", JsonConvert.SerializeObject(Contacts.MetaData));
 

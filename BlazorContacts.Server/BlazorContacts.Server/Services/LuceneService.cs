@@ -8,15 +8,17 @@ using Lucene.Net.Util;
 using System.Collections.Generic;
 using Microsoft.Azure.Storage;
 using System;
+using System.Linq;
 using Lucene.Net.Store.Azure;
 using Lucene.Net.QueryParsers.Classic;
+using BlazorContacts.Server.Paging;
 
-namespace BlazorContacts.Server
+namespace BlazorContacts.Server.Services
 {
     public class LuceneService
     {
-        const LuceneVersion AppLuceneVersion = LuceneVersion.LUCENE_48;
-
+        private const LuceneVersion AppLuceneVersion = LuceneVersion.LUCENE_48;
+        private int MaxSearchRecords = 1000;// just an arbitrary number
         private Directory _luceneIndexDirectory;
 
         public LuceneService(CloudStorageAccount storageAccount, string catalog)
@@ -31,7 +33,10 @@ namespace BlazorContacts.Server
             _luceneIndexDirectory = new AzureDirectory(storageAccount, catalog, new RAMDirectory());
         }
 
-        public void BuildIndex(IList<Contact> contacts)
+        public bool IsIndexed()
+            => _luceneIndexDirectory.ListAll().Any();
+       
+        public void BuildIndex(IEnumerable<Contact> contacts)
         {
             var analyzer = new StandardAnalyzer(AppLuceneVersion);
             var indexConfig = new IndexWriterConfig(AppLuceneVersion, analyzer);
@@ -54,13 +59,48 @@ namespace BlazorContacts.Server
             }                        
         }
 
-        public IList<Contact> Search(string searchTerm, int maxDocs = int.MaxValue)
+        public PagedList<Contact> Search(string searchTerm, int pageNumber, int pageSize)
         { 
             using (var reader = DirectoryReader.Open(_luceneIndexDirectory))
             {
                 var searcher = new IndexSearcher(reader);
 
-                Query query = MultiFieldQueryParser.Parse
+                var query = ToQuery(searchTerm);
+
+                var collector = TopScoreDocCollector.Create(MaxSearchRecords, true);
+
+                int startIndex = (pageNumber - 1) * pageSize;
+
+                searcher.Search(query, collector);
+
+                TopDocs topDocs = collector.GetTopDocs(startIndex, pageSize);
+
+
+                //ScoreDoc[] hits = searcher.Search(query, int.MaxValue).ScoreDocs;
+
+                //int startIndex = (pageNumber - 1) * pageSize;
+                //int endIndex = pageNumber * pageSize;
+                //endIndex = hits.Length < endIndex ? hits.Length : endIndex;
+
+                //for (int i = startIndex; i < endIndex; i++)
+                //{
+                //    luceneDocuments.Add(searcher.Doc(scoreDocs[i].doc));
+                //}
+
+                var items = new List<Contact>();
+                foreach (var hits in topDocs.ScoreDocs)
+                {
+                    Document doc = searcher.Doc(hits.Doc);
+                    items.Add(ToModel(doc));
+                }
+               
+                return new PagedList<Contact>(items, topDocs.TotalHits, pageNumber, pageSize);
+            }
+        }
+
+        private Query ToQuery(string searchTerm)
+        {
+            return MultiFieldQueryParser.Parse
                 (
                     AppLuceneVersion,
                     searchTerm,
@@ -68,28 +108,19 @@ namespace BlazorContacts.Server
                     new Occur[] { Occur.SHOULD, Occur.SHOULD, Occur.SHOULD, Occur.SHOULD, Occur.SHOULD, Occur.SHOULD, Occur.SHOULD },
                     new StandardAnalyzer(AppLuceneVersion)
                 );
-                
-                ScoreDoc[] hits = searcher.Search(query, maxDocs).ScoreDocs;
+        }
 
-                var result = new List<Contact>();
-                for (int i = 0; i < hits.Length; i++)
-                {
-                    int docId = hits[i].Doc;
-                    float score = hits[i].Score;
-                    Document doc = searcher.Doc(docId);
-
-                    result.Add(new Contact
-                    {
-                        Id = int.Parse(doc.Get("Id")),
-                        Name = doc.Get("Name"),
-                        Email = doc.Get("Email"),
-                        Company = doc.Get("Company"),
-                        Role = doc.Get("Role"),
-                        PhoneNumber = doc.Get("PhoneNumber")
-                    });
-                }
-                return result;
-            }
+        private Contact ToModel(Document doc)
+        {
+            return new Contact
+            {
+                Id = int.Parse(doc.Get("Id")),
+                Name = doc.Get("Name"),
+                Email = doc.Get("Email"),
+                Company = doc.Get("Company"),
+                Role = doc.Get("Role"),
+                PhoneNumber = doc.Get("PhoneNumber")
+            };
         }
     }
 }

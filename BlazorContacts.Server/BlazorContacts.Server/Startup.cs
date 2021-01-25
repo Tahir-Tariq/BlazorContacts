@@ -1,19 +1,12 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using BlazorContacts.Server.Context;
-using BlazorContacts.Server.Repository;
+using BlazorContacts.Server.Services;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.HttpsPolicy;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 
 namespace BlazorContacts.Server
 {
@@ -40,7 +33,7 @@ namespace BlazorContacts.Server
 
             //services.AddDbContext<ContactContext>(opt => opt.UseSqlServer(Configuration.GetConnectionString("sqlConnection")));
 
-            services.AddScoped<IContactRepository, ContactRepository>();
+            services.AddScoped<IContactService, ContactService>();
 
             services.AddDbContext<ContactContext>(opt => opt.UseInMemoryDatabase("ContactsDB"));
             

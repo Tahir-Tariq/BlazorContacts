@@ -18,5 +18,7 @@
         }
 
         public string SearchTerm { get; set; }
+
+        public bool HasSearchTerm => !string.IsNullOrWhiteSpace(SearchTerm);
     }
 }

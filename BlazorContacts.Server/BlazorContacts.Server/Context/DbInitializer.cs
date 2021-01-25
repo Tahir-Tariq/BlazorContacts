@@ -1,17 +1,40 @@
 ﻿using BlazorContacts.Server.Context;
 using Entities.Models;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
 
 namespace BlazorProducts.Server.Context
 {
-    public class DbInitializer
+    public static class DbInitializer
     {
+        public static IHost CreateDbIfNotExists(this IHost host)
+        {
+            using (var scope = host.Services.CreateScope())
+            {
+                using (var appContext = scope.ServiceProvider.GetRequiredService<ContactContext>())
+                {
+                    try
+                    {
+                        Initialize(appContext);
+                    }
+                    catch (Exception ex)
+                    {
+                        var logger = scope.ServiceProvider.GetRequiredService<ILogger>();
+                        logger.LogError(ex, "An error occurred creating the DB.");
+                    }
+                }
+            }
+
+            return host;
+        }
+
         public static void Initialize(ContactContext context)
         {
-            //context.Database.EnsureCreated();
+            context.Database.EnsureCreated();
 
             // Look for any Contacts.
             if (context.Contacts.Any())
