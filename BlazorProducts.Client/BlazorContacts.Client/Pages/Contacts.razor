@@ -1,0 +1,25 @@
+﻿@page "/Contacts"
+@using BlazorContacts.Client.Components.ContactTable
+@using BlazorContacts.Client.Components
+
+<div class="row">
+    <div class="col-md-5">
+        <Search OnSearchChanged="SearchChanged"/>
+    </div>
+    <div class="col-md-5">
+        @*Place for sort*@
+    </div>
+    <div class="col-md-2">
+        <a href="/createContact">Create Contact</a>
+    </div>
+</div>
+<div class="row">
+    <div class="col">
+        <ContactTable Contacts="ContactList" />
+    </div>
+</div>
+<div class="row">
+    <div class="col">
+        <Pagination MetaData="MetaData" Spread="2" SelectedPage="SelectedPage" />
+    </div>
+</div>

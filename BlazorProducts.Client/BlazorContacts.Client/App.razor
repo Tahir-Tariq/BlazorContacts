@@ -1,0 +1,13 @@
+@using BlazorContacts.Client.Pages
+@using BlazorContacts.Client.Shared
+
+<Router AppAssembly="@typeof(Program).Assembly">
+    <Found Context="routeData">
+        <RouteView RouteData="@routeData" DefaultLayout="@typeof(BlazorContacts.Client.Shared.MainLayout1)" />
+    </Found>
+    <NotFound>
+       @* <LayoutView Layout="@typeof(MainLayout)">
+            <CustomNotFound />
+        </LayoutView>*@
+    </NotFound>
+</Router>
