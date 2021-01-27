@@ -37,6 +37,7 @@ namespace BlazorContacts.Client.Components
             }
 
             _links.Add(new PagingLink(MetaData.CurrentPage + 1, MetaData.HasNext, "Next"));
+            _links.Add(new PagingLink(MetaData.TotalPages, MetaData.CurrentPage != MetaData.TotalPages, "Last"));
         }
 
         private async Task OnSelectedPage(PagingLink link)

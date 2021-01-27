@@ -31,13 +31,14 @@ namespace BlazorContacts.Server
                 .WithExposedHeaders("X-Pagination"));
             });
 
-            //services.AddDbContext<ContactContext>(opt => opt.UseSqlServer(Configuration.GetConnectionString("sqlConnection")));
+            services.AddDbContext<ContactContext>(opt => opt.UseSqlServer(Configuration.GetConnectionString("SqlConnection")));
 
             services.AddScoped<IContactService, ContactService>();
-
-            services.AddDbContext<ContactContext>(opt => opt.UseInMemoryDatabase("ContactsDB"));
             
-            services.AddSingleton<LuceneService>(new LuceneService(CloudStorageAccount.DevelopmentStorageAccount, "ContactIndex"));
+            var cs = CloudStorageAccount.Parse(Configuration.GetConnectionString("BlobConnection"));
+            var container = Configuration.GetConnectionString("BlobContainer");
+
+            services.AddSingleton<LuceneService>(new LuceneService(cs, container));
 
             services.AddControllers();
         }

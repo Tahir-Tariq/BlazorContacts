@@ -2,8 +2,6 @@
 using BlazorContacts.Server.Paging;
 using Entities.Models;
 using Entities.RequestParameters;
-using System.Collections.Generic;
-using System.Linq;
 
 namespace BlazorContacts.Server.Services
 {
@@ -32,7 +30,7 @@ namespace BlazorContacts.Server.Services
 
         public PagedList<Contact> SearchContacts(ContactParameters contactParameters)
         {
-            var lowerCaseSearchTerm = contactParameters.SearchTerm.Trim().ToLower();
+           var lowerCaseSearchTerm = contactParameters.SearchTerm.Trim().ToLower();
 
             return _luceneService.Search(lowerCaseSearchTerm, contactParameters.PageNumber, contactParameters.PageSize);
         }

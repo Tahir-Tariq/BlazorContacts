@@ -3,7 +3,7 @@ using Xunit;
 
 namespace BlazorContacts.Server.Tests
 {
-    public class UnitTest1
+    public class LuceneServiceTests
     {
         [Fact]
         public void Test1()
