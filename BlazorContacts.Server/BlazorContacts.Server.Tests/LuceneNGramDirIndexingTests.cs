@@ -9,56 +9,47 @@ using System.Text;
 using Lucene.Net.Documents;
 using Lucene.Net.Index;
 using Lucene.Net.Search;
-using Microsoft.Azure.Storage;
 using System.Globalization;
 using System.Collections.Generic;
 using Lucene.Net.Util;
 using Lucene.Net.QueryParsers.Classic;
 using Xunit;
-using Lucene.Net.Store.Azure;
 using Lucene.Net.Store;
 
 namespace BlazorContacts.Server.Tests
 {
-    public class LuceneNGramFixture : IDisposable
+    public class LuceneNGramDirFixture : IDisposable
     {
         public StringBuilder Log;
         public Lucene.Net.Store.Directory LuceneDirectory;
         public LuceneVersion AppLuceneVersion = LuceneVersion.LUCENE_48;
         public  Dictionary<int, Contact> ContactsHash = null;
 
-        private AzureDirectory _azureDirectory = null;
+        private FSDirectory _fSDirectory = null;
 
-        public LuceneNGramFixture()
+        public LuceneNGramDirFixture()
         {
             Log = new StringBuilder();
             Log.Insert(0, "*",50).AppendLine();
             ContactsHash = ContactsHash ?? GetTestContacts().ToDictionary(con => con.Id);
-            LuceneDirectory = PrepreAzureDirectory();
+            LuceneDirectory = PrepreLocalDirectory();
         }
 
-        private Lucene.Net.Store.Directory PrepreAzureDirectory()
+        private Lucene.Net.Store.Directory PrepreLocalDirectory()
         {
-            var cloudStorageAccount = CloudStorageAccount.DevelopmentStorageAccount;
-
-            const string containerName = "ngramcontacts";
-
-            var azureDirectory = new AzureDirectory(cloudStorageAccount, containerName, new RAMDirectory());
-
-            if (azureDirectory.BlobContainer.Exists())
-                azureDirectory.BlobContainer.Delete();
+            var fs = FSDirectory.Open("ngramcontactsdir");
 
             var sw = new Stopwatch();
             sw.Start();
-            BuildIndex(azureDirectory, ContactsHash.Values);
+            BuildIndex(fs, ContactsHash.Values);
             sw.Stop();
 
-            var containerSize = azureDirectory.ListAll().Select(file => azureDirectory.FileLength(file)).Sum();
+            var containerSize = fs.ListAll().Select(file => fs.FileLength(file)).Sum();
 
             Log.AppendLine($"Index container size {containerSize} built in {TimeSpan.FromMilliseconds(sw.ElapsedMilliseconds)} | {sw.ElapsedMilliseconds}");
 
-            _azureDirectory = azureDirectory;
-            return azureDirectory;
+            _fSDirectory = fs;
+            return fs;
         }
 
         public IList<Contact> GetTestContacts()
@@ -100,15 +91,19 @@ namespace BlazorContacts.Server.Tests
         public void Dispose()
         {
             Debug.WriteLine(Log.ToString());
-            _azureDirectory?.BlobContainer.Delete();
+        
+            var indexConfig = new IndexWriterConfig(AppLuceneVersion, new NGramAnalyzer(AppLuceneVersion,2,2));
+
+            using var writer = new IndexWriter(_fSDirectory, indexConfig);
+            writer.DeleteAll();
         }
     }
 
-    public class LuceneNGramIndexingTests : IClassFixture<LuceneNGramFixture>
+    public class LuceneNGramDirIndexingTests : IClassFixture<LuceneNGramDirFixture>
     {
-        LuceneNGramFixture Fixture;
+        LuceneNGramDirFixture Fixture;
         
-        public LuceneNGramIndexingTests(LuceneNGramFixture fixture)
+        public LuceneNGramDirIndexingTests(LuceneNGramDirFixture fixture)
         {
             Fixture = fixture;
         }                  
@@ -133,7 +128,7 @@ namespace BlazorContacts.Server.Tests
         [InlineData("henderson", 63)]
         [InlineData("gmail", 59)]        
         [InlineData("BrendaRobinson", 76)]
-        public void TestNGramSearch(string searchTerm, int expectedCount)
+        public void TestLocalDirSearch(string searchTerm, int expectedCount)
         {                    
             var query = ToQuery(searchTerm);
 
