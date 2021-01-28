@@ -20,14 +20,39 @@ using Lucene.Net.Store;
 
 namespace BlazorContacts.Server.Tests
 {
-    public class LuceneNGramIndexingTests
+    public class LuceneNGramFixture : IDisposable
     {
-        const LuceneVersion AppLuceneVersion = LuceneVersion.LUCENE_48;
-        static Dictionary<int, Contact> ContactsHash = null;
-
-        public LuceneNGramIndexingTests()
+        public StringBuilder Log;
+        public Lucene.Net.Store.Directory LuceneDirectory;
+        public LuceneVersion AppLuceneVersion = LuceneVersion.LUCENE_48;
+        public LuceneNGramFixture()
         {
-            ContactsHash = ContactsHash ?? GetTestContacts().ToDictionary(con => con.Id);
+            Log = new StringBuilder();
+            Log.Insert(0, "*",50);
+            LuceneDirectory =  PrepreDirectory();
+        }
+
+        private Lucene.Net.Store.Directory PrepreDirectory()
+        {
+            var cloudStorageAccount = CloudStorageAccount.DevelopmentStorageAccount;
+
+            const string containerName = "ngramcontacts";
+
+            var azureDirectory = new AzureDirectory(cloudStorageAccount, containerName, new RAMDirectory());
+
+            if (azureDirectory.BlobContainer.Exists())
+                azureDirectory.BlobContainer.Delete();
+
+            var sw = new Stopwatch();
+            sw.Start();
+            BuildIndex(azureDirectory, GetTestContacts());
+            sw.Stop();
+
+            var containerSize = azureDirectory.ListAll().Select(file => azureDirectory.FileLength(file)).Sum();
+
+            Log.AppendLine($"Index container size {containerSize} built in {TimeSpan.FromMilliseconds(sw.ElapsedMilliseconds)} | {sw.ElapsedMilliseconds}");
+
+            return azureDirectory;
         }
 
         public IList<Contact> GetTestContacts()
@@ -58,7 +83,7 @@ namespace BlazorContacts.Server.Tests
 
                     doc.Add(new StringField("Company", contact.Company, Field.Store.YES));
                     doc.Add(new StringField("Role", contact.Role, Field.Store.YES));
-                    doc.Add(new StringField("PhoneNumber", contact.PhoneNumber, Field.Store.YES));                    
+                    doc.Add(new StringField("PhoneNumber", contact.PhoneNumber, Field.Store.YES));
 
                     writer.AddDocument(doc);
                 }
@@ -66,15 +91,30 @@ namespace BlazorContacts.Server.Tests
             }
         }
 
+        public void Dispose()
+        {
+            Debug.WriteLine(Log.ToString());
+        }
+    }
+
+    public class LuceneNGramIndexingTests : Xunit.IClassFixture<LuceneNGramFixture>
+    {
+        LuceneNGramFixture Fixture;
+        
+        public LuceneNGramIndexingTests(LuceneNGramFixture fixture)
+        {
+            Fixture = fixture;
+        }                  
+
         private Query ToQuery(string searchTerm)
         {
             return MultiFieldQueryParser.Parse
                 (
-                    AppLuceneVersion,
+                    Fixture.AppLuceneVersion,
                     searchTerm,
                     new string[] { "Name", "Email", "Company", "Role", "PhoneNumber" },
                     new Occur[] { Occur.SHOULD, Occur.SHOULD, Occur.SHOULD, Occur.SHOULD, Occur.SHOULD },
-                    new NGramAnalyzer(AppLuceneVersion, 2, 6)
+                    new NGramAnalyzer(Fixture.AppLuceneVersion, 2, 6)
                 );
         }
 
@@ -87,59 +127,31 @@ namespace BlazorContacts.Server.Tests
         [InlineData("gmail", 59)]        
         [InlineData("BrendaRobinson", 76)]
         public void TestNGramSearch(string searchTerm, int expectedCount)
-        {
-            var cloudStorageAccount = CloudStorageAccount.DevelopmentStorageAccount;
-
-            const string containerName = "ngramcontacts";
-            
-            var azureDirectory = new AzureDirectory(cloudStorageAccount, containerName, new RAMDirectory());
+        {                    
+            var query = ToQuery(searchTerm);
 
             var sw = new Stopwatch();
-            if (!azureDirectory.ListAll().Any())
+            var ireader = DirectoryReader.Open(Fixture.LuceneDirectory);
+            StringBuilder result = new StringBuilder();
+            var searcher = new IndexSearcher(ireader);
+            sw.Reset();
+            sw.Start();
+            var topDocs = searcher.Search(query, 100);
+            sw.Stop();
+
+            Fixture.Log.AppendLine($"Search Term '{searchTerm}' returned in {TimeSpan.FromMilliseconds(sw.ElapsedMilliseconds)} | {sw.ElapsedMilliseconds}");
+
+            Trace.TraceInformation("Search Term:'{0}' returned these Ids:\n{1}", searchTerm, result.ToString());
+
+            List<int> ids = new List<int>();
+            foreach (var hit in topDocs.ScoreDocs)
             {
-                sw.Start();
-                BuildIndex(azureDirectory, ContactsHash.Values);
-                sw.Stop();
-
-                azureDirectory.BlobContainer.FetchAttributes();
-
-                var containerSize = azureDirectory.ListAll().Select(file => azureDirectory.FileLength(file)).Sum();
-
-                Debug.WriteLine($"Index container size {containerSize} built in {TimeSpan.FromMilliseconds(sw.ElapsedMilliseconds)} | {sw.ElapsedMilliseconds}");
+                var doc = searcher.Doc(hit.Doc);
+                ids.Add(int.Parse(doc.Get("Id")));
+                result.AppendLine(doc.Get("Name"));
             }
 
-            var query = ToQuery(searchTerm);
-            try
-            {
-                var ireader = DirectoryReader.Open(azureDirectory);
-                StringBuilder result = new StringBuilder();
-                var searcher = new IndexSearcher(ireader);
-                sw.Reset();
-                sw.Start();
-                var topDocs = searcher.Search(query, 100);
-                sw.Stop();
-
-                Debug.WriteLine($"Search Term '{searchTerm}' returned in {TimeSpan.FromMilliseconds(sw.ElapsedMilliseconds)} | {sw.ElapsedMilliseconds}");
-
-                Trace.TraceInformation("Search Term:'{0}' returned these Ids:\n{1}", searchTerm, result.ToString());
-
-                List<int> ids = new List<int>();
-                foreach (var hit in topDocs.ScoreDocs)
-                {
-                    var doc = searcher.Doc(hit.Doc);
-                    ids.Add(int.Parse(doc.Get("Id")));
-                    result.AppendLine(doc.Get("Name"));
-                }
-
-                Assert.Equal(expectedCount, topDocs.TotalHits);
-            }          
-            finally
-            {
-                if (azureDirectory.BlobContainer.Exists())
-                {
-                    azureDirectory.BlobContainer.Delete();
-                }
-            }
+            Assert.Equal(expectedCount, topDocs.TotalHits);
         }        
     }
 }
