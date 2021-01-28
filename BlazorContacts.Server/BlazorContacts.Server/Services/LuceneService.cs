@@ -1,11 +1,9 @@
 ﻿using Entities.Models;
-using Lucene.Net.Analysis.Standard;
 using Lucene.Net.Documents;
 using Lucene.Net.Index;
 using Lucene.Net.Search;
 using Lucene.Net.Store;
 using Lucene.Net.Util;
-using Lucene.Net.Analysis.NGram;
 using System.Collections.Generic;
 using Microsoft.Azure.Storage;
 using System;
@@ -13,7 +11,6 @@ using System.Linq;
 using Lucene.Net.Store.Azure;
 using Lucene.Net.QueryParsers.Classic;
 using BlazorContacts.Server.Paging;
-using System.IO;
 
 namespace BlazorContacts.Server.Services
 {
@@ -21,8 +18,8 @@ namespace BlazorContacts.Server.Services
     {
         private const LuceneVersion AppLuceneVersion = LuceneVersion.LUCENE_48;
         private int MaxSearchRecords = 1000;// just an arbitrary number
-        private AzureDirectory _azureDirectory;
-
+        private Directory _azureDirectory;
+        private NGramAnalyzer _analyzer;
         public LuceneService(CloudStorageAccount storageAccount, string catalog)
         {
             storageAccount = storageAccount ?? throw new ArgumentNullException(nameof(storageAccount));
@@ -33,42 +30,44 @@ namespace BlazorContacts.Server.Services
             }
 
             _azureDirectory = new AzureDirectory(storageAccount, catalog, new RAMDirectory());
+            _analyzer = new NGramAnalyzer(AppLuceneVersion, 3, 6);
         }
 
         public bool IsIndexed()
             => _azureDirectory.ListAll().Any();
        
         public void BuildIndex(IEnumerable<Contact> contacts)
-        {
-            var analyzer = new StandardAnalyzer(AppLuceneVersion);
-            var indexConfig = new IndexWriterConfig(AppLuceneVersion, analyzer);
+        {            
+            var indexConfig = new IndexWriterConfig(AppLuceneVersion, _analyzer);
             using (var writer = new IndexWriter(_azureDirectory, indexConfig))
             {
                 foreach (var contact in contacts)
                 {
                     Document doc = new Document();
                     doc.Add(new StringField("Id", contact.Id.ToString(), Field.Store.YES));
-                    doc.Add(new TextField("Name", contact.Name, Field.Store.YES));
-                    doc.Add(new TextField("Email", contact.Email, Field.Store.YES));
+                    doc.Add(new TextField("Name", contact.Name, Field.Store.NO));
+                    doc.Add(new TextField("Email", contact.Email, Field.Store.NO));
 
-                    doc.Add(new StringField("Company", contact.Company, Field.Store.YES));
-                    doc.Add(new StringField("Role", contact.Role, Field.Store.YES));
+                    doc.Add(new StringField("Company", contact.Company, Field.Store.NO));
+                    doc.Add(new StringField("Role", contact.Role, Field.Store.NO));
                     doc.Add(new StringField("PhoneNumber", contact.PhoneNumber, Field.Store.YES));
-
-                    doc.Add(new TextField("Name-Terms", new NGramTokenizer(AppLuceneVersion, new StringReader(contact.Name), 2, 6)));
-
-                    doc.Add(new TextField("Email-Terms", new NGramTokenizer(AppLuceneVersion, new StringReader(contact.Email), 2, 6)));
-
-                    doc.Add(new TextField("Company-Terms", new NGramTokenizer(AppLuceneVersion, new StringReader(contact.Company), 2, 4)));
-
-                    doc.Add(new TextField("Role-Terms", new NGramTokenizer(AppLuceneVersion, new StringReader(contact.Role), 2, 4)));
-
-                    doc.Add(new TextField("PhoneNumber-Terms", new NGramTokenizer(AppLuceneVersion, new StringReader(contact.PhoneNumber), 2, 4)));
 
                     writer.AddDocument(doc);
                 }
                 writer.Flush(triggerMerge: false, applyAllDeletes: false);
             }
+        }
+
+        private Query ToQuery(string searchTerm)
+        {
+            return MultiFieldQueryParser.Parse
+                (
+                    AppLuceneVersion,
+                    searchTerm,
+                    new string[] { "Name", "Email", "Company", "Role", "PhoneNumber" },
+                    new Occur[] { Occur.SHOULD, Occur.SHOULD, Occur.SHOULD, Occur.SHOULD, Occur.SHOULD },
+                    _analyzer
+                );
         }
 
         public PagedList<Contact> Search(string searchTerm, int pageNumber, int pageSize)
@@ -96,18 +95,6 @@ namespace BlazorContacts.Server.Services
                
                 return new PagedList<Contact>(items, topDocs.TotalHits, pageNumber, pageSize);
             }
-        }
-
-        private Query ToQuery(string searchTerm)
-        {
-            return MultiFieldQueryParser.Parse
-                (
-                    AppLuceneVersion,
-                    searchTerm,
-                    new string[] { "Id", "Name", "Email", "Company", "Role", "PhoneNumber", "Name-Terms", "Email-Terms", "Company-Terms", "Role-Terms", "PhoneNumber-Terms" },
-                    new Occur[] { Occur.SHOULD, Occur.SHOULD, Occur.SHOULD, Occur.SHOULD, Occur.SHOULD, Occur.SHOULD, Occur.SHOULD, Occur.SHOULD, Occur.SHOULD, Occur.SHOULD, Occur.SHOULD },
-                    new StandardAnalyzer(AppLuceneVersion)
-                );
         }
 
         private Contact ToModel(Document doc)
