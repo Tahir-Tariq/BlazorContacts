@@ -17,6 +17,7 @@ using Lucene.Net.QueryParsers.Classic;
 using Xunit;
 using Lucene.Net.Store.Azure;
 using Lucene.Net.Store;
+using Lucene.Net.Analysis.Standard;
 
 namespace BlazorContacts.Server.Tests
 {
@@ -121,7 +122,8 @@ namespace BlazorContacts.Server.Tests
                     searchTerm,
                     new string[] { "Name", "Email", "Company", "Role", "PhoneNumber" },
                     new Occur[] { Occur.SHOULD, Occur.SHOULD, Occur.SHOULD, Occur.SHOULD, Occur.SHOULD },
-                    new NGramAnalyzer(Fixture.AppLuceneVersion, 2, 6)
+                    new StandardAnalyzer(LuceneVersion.LUCENE_48)
+                //new NGramAnalyzer(Fixture.AppLuceneVersion, 2, 6)
                 );
         }
 

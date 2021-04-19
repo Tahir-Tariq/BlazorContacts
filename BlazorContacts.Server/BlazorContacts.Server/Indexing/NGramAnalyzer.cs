@@ -5,7 +5,7 @@ using Lucene.Net.Analysis.NGram;
 using Lucene.Net.Analysis.Standard;
 using Lucene.Net.Util;
 
-namespace BlazorContacts.Server.Services
+namespace BlazorContacts.Server.Analyzers
 {
     public class NGramAnalyzer : Analyzer
     {

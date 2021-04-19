@@ -38,7 +38,7 @@ namespace BlazorContacts.Server
             var cs = CloudStorageAccount.Parse(Configuration.GetConnectionString("BlobConnection"));
             var container = Configuration.GetConnectionString("BlobContainer");
 
-            services.AddSingleton<LuceneService>(new LuceneService(cs, container));
+            services.AddSingleton<LuceneService>(new LuceneService(cs, container, new Indexing.NgramIndexing()));
 
             services.AddControllers();
         }

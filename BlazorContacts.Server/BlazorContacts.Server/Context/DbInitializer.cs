@@ -1,10 +1,14 @@
 ﻿using BlazorContacts.Server.Context;
+using CsvHelper;
+using CsvHelper.Configuration;
 using Entities.Models;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
 using System.Linq;
 
 namespace BlazorProducts.Server.Context
@@ -42,30 +46,24 @@ namespace BlazorProducts.Server.Context
                 return;   // DB has been seeded
             }
 
-            var contacts = new List<Contact>();
-            for (int i = 1; i <= 50; i++)
-            {                
+            IList<Contact> contacts = GetTestContacts("10000 Records_.csv");
 
-                contacts.Add(
-                    new Contact { Name = $"Person {i}", Email = "abc@yahoo.com", Company = "ITN", Id = i, Role = "IT", PhoneNumber = $"+1 555 111 1111{i}" }
-                    );
-            }
+            context.Contacts.AddRange(contacts);
 
-            //var contacts = new Contact[]
-            //{
-            //    new Contact { Name = "Person 1",  PhoneNumber = "+1 555 111 1111" },
-            //    new Contact { Name = "Person 2",  PhoneNumber = "+1 555 222 2222" },
-            //    new Contact { Name = "Person 3",  PhoneNumber = "+1 555 333 3333" },
-            //    new Contact { Name = "Person 4",  PhoneNumber = "+1 555 444 4444" },
-            //    new Contact { Name = "Person 5",  PhoneNumber = "+1 555 555 5555" },
-            //};
+            context.SaveChanges();
+        }
 
-            foreach (Contact c in contacts)
+        public static IList<Contact> GetTestContacts(string filename)
+        {
+            var config = new CsvConfiguration(CultureInfo.InvariantCulture)
             {
-                context.Contacts.Add(c);
+                HasHeaderRecord = true,
+            };
+            using (var reader = new StreamReader(filename))
+            using (var csv = new CsvReader(reader, config))
+            {
+                return csv.GetRecords<Contact>().ToList();
             }
-
-            context.SaveChanges();                       
         }
     }
 }

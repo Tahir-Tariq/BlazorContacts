@@ -3,72 +3,42 @@ using Lucene.Net.Documents;
 using Lucene.Net.Index;
 using Lucene.Net.Search;
 using Lucene.Net.Store;
-using Lucene.Net.Util;
 using System.Collections.Generic;
 using Microsoft.Azure.Storage;
 using System;
 using System.Linq;
 using Lucene.Net.Store.Azure;
-using Lucene.Net.QueryParsers.Classic;
 using BlazorContacts.Server.Paging;
+using BlazorContacts.Server.Indexing;
 
 namespace BlazorContacts.Server.Services
 {
     public class LuceneService
-    {
-        private const LuceneVersion AppLuceneVersion = LuceneVersion.LUCENE_48;
+    {        
         private int MaxSearchRecords = 1000;// just an arbitrary number
         private Directory _azureDirectory;
-        private NGramAnalyzer _analyzer;
-        public LuceneService(CloudStorageAccount storageAccount, string catalog)
+        private IndexingStrategy _indexer;
+        public LuceneService(CloudStorageAccount storageAccount, string catalog, IndexingStrategy indexingStrategy)
         {
             storageAccount = storageAccount ?? throw new ArgumentNullException(nameof(storageAccount));
+            _indexer = indexingStrategy ?? throw new ArgumentNullException(nameof(indexingStrategy));
 
             if (string.IsNullOrWhiteSpace(catalog))
             {
                 throw new ArgumentNullException(nameof(catalog));
             }
 
-            _azureDirectory = new AzureDirectory(storageAccount, catalog, new RAMDirectory());
-            _analyzer = new NGramAnalyzer(AppLuceneVersion, 3, 6);
+            _azureDirectory = new AzureDirectory(storageAccount, catalog, new RAMDirectory());            
         }
 
         public bool IsIndexed()
             => _azureDirectory.ListAll().Any();
-       
+
         public void BuildIndex(IEnumerable<Contact> contacts)
-        {            
-            var indexConfig = new IndexWriterConfig(AppLuceneVersion, _analyzer);
-            using (var writer = new IndexWriter(_azureDirectory, indexConfig))
-            {
-                foreach (var contact in contacts)
-                {
-                    Document doc = new Document();
-                    doc.Add(new StringField("Id", contact.Id.ToString(), Field.Store.YES));
-                    doc.Add(new TextField("Name", contact.Name, Field.Store.NO));
-                    doc.Add(new TextField("Email", contact.Email, Field.Store.NO));
-
-                    doc.Add(new StringField("Company", contact.Company, Field.Store.NO));
-                    doc.Add(new StringField("Role", contact.Role, Field.Store.NO));
-                    doc.Add(new StringField("PhoneNumber", contact.PhoneNumber, Field.Store.YES));
-
-                    writer.AddDocument(doc);
-                }
-                writer.Flush(triggerMerge: false, applyAllDeletes: false);
-            }
-        }
+            => _indexer.BuildIndex(_azureDirectory, contacts);
 
         private Query ToQuery(string searchTerm)
-        {
-            return MultiFieldQueryParser.Parse
-                (
-                    AppLuceneVersion,
-                    searchTerm,
-                    new string[] { "Name", "Email", "Company", "Role", "PhoneNumber" },
-                    new Occur[] { Occur.SHOULD, Occur.SHOULD, Occur.SHOULD, Occur.SHOULD, Occur.SHOULD },
-                    _analyzer
-                );
-        }
+            => _indexer.ToQuery(searchTerm);        
 
         public PagedList<Contact> Search(string searchTerm, int pageNumber, int pageSize)
         { 
@@ -86,16 +56,14 @@ namespace BlazorContacts.Server.Services
 
                 TopDocs topDocs = collector.GetTopDocs(startIndex, pageSize);
 
-                var items = new List<Contact>();
-                foreach (var hits in topDocs.ScoreDocs)
-                {
-                    Document doc = searcher.Doc(hits.Doc);
-                    items.Add(ToModel(doc));
-                }
+                var contacts = ToContacts(searcher, topDocs);                
                
-                return new PagedList<Contact>(items, topDocs.TotalHits, pageNumber, pageSize);
+                return new PagedList<Contact>(contacts.ToList(), topDocs.TotalHits, pageNumber, pageSize);
             }
         }
+
+        private IEnumerable<Contact> ToContacts(IndexSearcher searcher, TopDocs topDocs)
+            => topDocs.ScoreDocs.Select(hit => ToModel(searcher.Doc(hit.Doc)));
 
         private Contact ToModel(Document doc)
         {

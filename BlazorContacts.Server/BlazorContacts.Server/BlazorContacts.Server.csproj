@@ -5,7 +5,18 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Remove="Context\10000 Records_.csv" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Context\10000 Records_.csv">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Azure.Storage.Blobs" Version="12.8.0" />
+    <PackageReference Include="CsvHelper" Version="21.2.1" />
     <PackageReference Include="Lucene.Net" Version="4.8.0-beta00013" />
     <PackageReference Include="Lucene.Net.Analysis.Common" Version="4.8.0-beta00013" /> 
     <PackageReference Include="Lucene.Net.QueryParser" Version="4.8.0-beta00013" />    
